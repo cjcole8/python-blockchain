@@ -2,6 +2,7 @@ import uuid
 import time
 
 from backend.wallet.wallet import Wallet
+from backend.config import MINING_REWARD, MINING_REWARD_INPUT
 
 
 class Transaction:
@@ -9,10 +10,18 @@ class Transaction:
     Document of an exchange in currency from a sender to one or more recipients
     """
 
-    def __init__(self, sender_wallet, recipient, amount):
-        self.id = str(uuid.uuid4())[0:8]
-        self.output = self.create_output(sender_wallet, recipient, amount)
-        self.input = self.create_input(sender_wallet, self.output)
+    def __init__(
+        self,
+        sender_wallet=None,
+        recipient=None,
+        amount=None,
+        id=None,
+        output=None,
+        input=None,
+    ):
+        self.id = id or str(uuid.uuid4())[0:8]
+        self.output = output or self.create_output(sender_wallet, recipient, amount)
+        self.input = input or self.create_input(sender_wallet, self.output)
 
     def create_output(self, sender_wallet, recipient, amount):
         """
@@ -55,12 +64,35 @@ class Transaction:
 
         self.input = self.create_input(sender_wallet, self.output)
 
+    def to_json(self):
+        """
+        Deserialize the transaction's json back into a Transaction instance
+        """
+        return self.__dict__
+
+    @staticmethod
+    def from_json(transaction_json):
+        """
+        Deserialize a transaction's JSON
+        """
+        # return Transaction(
+        #     id=transaction_json["id"],
+        #     output=transaction_json["output"],
+        #     input=transaction_json["input"],
+        # )
+        return Transaction(**transaction_json)
+
     @staticmethod
     def is_valid_transaction(transaction):
         """
         Validate a transaction.
         Raise an exception for invalid
         """
+        if transaction.input == MINING_REWARD_INPUT:
+            if list(transaction.output.values()) != [MINING_REWARD]:
+                raise Exception("Invalid mining reward")
+            return
+
         output_total = sum(transaction.output.values())
 
         if transaction.input["amount"] != output_total:
@@ -73,10 +105,24 @@ class Transaction:
         ):
             raise Exception("Invalid signature")
 
+    @staticmethod
+    def reward_transaction(miner_wallet):
+        """
+        Generate a reward transaction for the miner
+        """
+        output = {}
+        output[miner_wallet.address] = MINING_REWARD
+
+        return Transaction(input=MINING_REWARD_INPUT, output=output)
+
 
 def main():
     transaction = Transaction(Wallet(), "recipient", 15)
     print(f"transaction.__dict__: {transaction.__dict__}")
+
+    transaction_json = transaction.to_json()
+    restored_transaction = Transaction.from_json(transaction_json)
+    print(f"Restored: {restored_transaction}")
 
 
 if __name__ == "__main__":
